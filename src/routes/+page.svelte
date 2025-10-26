@@ -1,11 +1,11 @@
 <script lang="ts">
   let email = '';
-  let status = '';
-  let message = '';
+  let sending = false;
+  let results: { resend: string; sendgrid: string } | null = null;
 
   async function sendEmail() {
-    status = 'sending';
-    message = '';
+    sending = true;
+    results = null;
 
     const response = await fetch('/api/send', {
       method: 'POST',
@@ -15,38 +15,63 @@
       body: JSON.stringify({ email }),
     });
 
-    const data = await response.json();
-
     if (response.ok) {
-      status = 'success';
-      message = 'Email sent successfully!';
+      results = await response.json();
     } else {
-      status = 'error';
-      message = data.error || 'Failed to send email.';
+      results = {
+        resend: 'error',
+        sendgrid: 'error',
+      };
     }
+
+    sending = false;
   }
 </script>
 
-<div class="container mx-auto p-8">
+<div class="container mx-auto p-8 max-w-lg">
   <div class="card bg-primary text-primary-content shadow-xl">
     <div class="card-body">
-      <h2 class="card-title">Email Tester</h2>
-      <p>Enter an email address to send a test email to.</p>
-      <div class="card-actions justify-center">
-        <input type="email" bind:value={email} placeholder="email@example.com" class="input input-bordered w-full max-w-xs" />
-        <button class="btn btn-secondary" on:click={sendEmail} disabled={status === 'sending'}>
-          {#if status === 'sending'}
+      <h2 class="card-title">Email Service Tester</h2>
+      <p>Enter an email to compare Resend and SendGrid delivery.</p>
+      <div class="card-actions justify-center items-center mt-4">
+        <input
+          type="email"
+          bind:value={email}
+          placeholder="email@example.com"
+          class="input input-bordered w-full max-w-xs"
+          disabled={sending}
+        />
+        <button class="btn btn-secondary" on:click={sendEmail} disabled={sending}>
+          {#if sending}
+            <span class="loading loading-spinner"></span>
             Sending...
           {:else}
-            Send Email
+            Send Emails
           {/if}
         </button>
       </div>
-      {#if message}
-        <div class="alert {status === 'success' ? 'alert-success' : 'alert-error'} mt-4">
-          <div>
-            <span>{message}</span>
-          </div>
+
+      {#if results}
+        <div class="mt-6 space-y-2 text-center">
+            <h3 class="text-lg font-bold">Results:</h3>
+            <div class="flex justify-around">
+                <div class="text-center">
+                    <p class="font-bold">Resend</p>
+                    {#if results.resend === 'success'}
+                        <div class="badge badge-success gap-2">Success</div>
+                    {:else}
+                        <div class="badge badge-error gap-2">Failed</div>
+                    {/if}
+                </div>
+                <div class="text-center">
+                    <p class="font-bold">SendGrid</p>
+                    {#if results.sendgrid === 'success'}
+                        <div class="badge badge-success gap-2">Success</div>
+                    {:else}
+                        <div class="badge badge-error gap-2">Failed</div>
+                    {/if}
+                </div>
+            </div>
         </div>
       {/if}
     </div>
