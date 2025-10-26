@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { Resend } from 'resend';
-import { RESEND_API_KEY, SENDER_EMAIL, SENDGRID_API_KEY } from '$env/static/private';
+import { RESEND_API_KEY, RESEND_SENDER_EMAIL, SENDGRID_API_KEY, SENDGRID_SENDER_EMAIL } from '$env/static/private';
 
 // Initialize Resend client as its constructor is safe.
 const resend = new Resend(RESEND_API_KEY);
@@ -13,7 +13,7 @@ export async function POST({ request }) {
   }
 
   const resendPromise = resend.emails.send({
-    from: SENDER_EMAIL,
+    from: RESEND_SENDER_EMAIL,
     to: email,
     subject: 'Hello from Resend!',
     html: '<p>Hi there! This is a test email from the SvelteKit email tester app.</p>',
@@ -27,7 +27,7 @@ export async function POST({ request }) {
     },
     body: JSON.stringify({
       personalizations: [{ to: [{ email }] }],
-      from: { email: SENDER_EMAIL },
+      from: { email: SENDGRID_SENDER_EMAIL },
       subject: 'Hello from SendGrid!',
       content: [{ type: 'text/html', value: '<p>Hi there! This is a test email from the SvelteKit email tester app.</p>' }],
     }),
@@ -36,16 +36,14 @@ export async function POST({ request }) {
   const [resendResult, sendgridResult] = await Promise.allSettled([resendPromise, sendgridPromise]);
 
   let sendgridStatus = 'failed';
-  if (sendgridResult.status === 'fulfilled') {
-      // For fetch, we need to check if the response was successful (status 2xx)
-      if (sendgridResult.value.ok) {
-        sendgridStatus = 'success';
-      } else {
-        // Log the error response from SendGrid for debugging
-        const errorBody = await sendgridResult.value.text();
-        console.error('SendGrid API Error:', errorBody);
-      }
+  if (sendgridResult.status === 'fulfilled' && sendgridResult.value.ok) {
+    sendgridStatus = 'success';
+  } else if (sendgridResult.status === 'fulfilled') {
+    // Log the error response from SendGrid for debugging on the server
+    const errorBody = await sendgridResult.value.text();
+    console.error('SendGrid API Error:', errorBody);
   } else {
+    // Log fetch-related errors
     console.error('SendGrid fetch Error:', sendgridResult.reason);
   }
 
