@@ -1,9 +1,8 @@
 import { json } from '@sveltejs/kit';
 import { Resend } from 'resend';
-import sgMail from '@sendgrid/mail';
 import { RESEND_API_KEY, SENDER_EMAIL, SENDGRID_API_KEY } from '$env/static/private';
 
-// Initialize Resend client here as its constructor is safe.
+// Initialize Resend client as its constructor is safe.
 const resend = new Resend(RESEND_API_KEY);
 
 export async function POST({ request }) {
@@ -13,49 +12,51 @@ export async function POST({ request }) {
     return json({ error: 'Email is required' }, { status: 400 });
   }
 
-  try {
-    // Initialize SendGrid client inside the handler to catch potential startup errors.
-    sgMail.setApiKey(SENDGRID_API_KEY);
+  const resendPromise = resend.emails.send({
+    from: SENDER_EMAIL,
+    to: email,
+    subject: 'Hello from Resend!',
+    html: '<p>Hi there! This is a test email from the SvelteKit email tester app.</p>',
+  });
 
-    const resendPromise = resend.emails.send({
-      from: SENDER_EMAIL,
-      to: email,
-      subject: 'Hello from Resend!',
-      html: '<p>Hi there! This is a test email from the SvelteKit email tester app.</p>',
-    });
-
-    const sendgridPromise = sgMail.send({
-      from: SENDER_EMAIL,
-      to: email,
+  const sendgridPromise = fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${SENDGRID_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      personalizations: [{ to: [{ email }] }],
+      from: { email: SENDER_EMAIL },
       subject: 'Hello from SendGrid!',
-      html: '<p>Hi there! This is a test email from the SvelteKit email tester app.</p>',
-    });
+      content: [{ type: 'text/html', value: '<p>Hi there! This is a test email from the SvelteKit email tester app.</p>' }],
+    }),
+  });
 
-    const [resendResult, sendgridResult] = await Promise.allSettled([resendPromise, sendgridPromise]);
+  const [resendResult, sendgridResult] = await Promise.allSettled([resendPromise, sendgridPromise]);
 
-    const results = {
-      resend: resendResult.status === 'fulfilled' ? 'success' : 'failed',
-      sendgrid: sendgridResult.status === 'fulfilled' ? 'success' : 'failed',
-    };
-
-    if (resendResult.status === 'rejected') {
-      console.error('Resend error:', resendResult.reason);
-    }
-    if (sendgridResult.status === 'rejected') {
-      console.error('SendGrid error:', sendgridResult.reason);
-    }
-
-    return json(results);
-  } catch (error) {
-    console.error('Generic error in /api/send:', error);
-    // Return a generic error response that the frontend can handle
-    return json(
-      {
-        resend: 'failed',
-        sendgrid: 'failed',
-        error: 'An unexpected error occurred on the server.',
-      },
-      { status: 500 }
-    );
+  let sendgridStatus = 'failed';
+  if (sendgridResult.status === 'fulfilled') {
+      // For fetch, we need to check if the response was successful (status 2xx)
+      if (sendgridResult.value.ok) {
+        sendgridStatus = 'success';
+      } else {
+        // Log the error response from SendGrid for debugging
+        const errorBody = await sendgridResult.value.text();
+        console.error('SendGrid API Error:', errorBody);
+      }
+  } else {
+    console.error('SendGrid fetch Error:', sendgridResult.reason);
   }
+
+  const results = {
+    resend: resendResult.status === 'fulfilled' ? 'success' : 'failed',
+    sendgrid: sendgridStatus,
+  };
+
+  if (resendResult.status === 'rejected') {
+    console.error('Resend error:', resendResult.reason);
+  }
+
+  return json(results);
 }
